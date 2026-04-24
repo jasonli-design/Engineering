@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client API Usage Archetypes — 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#f5f5f7; font-family:'Manrope',sans-serif; padding:32px 24px 60px; }
+
+.page-header { text-align:center; margin-bottom:24px; }
+.page-header h1 { font-size:22px; font-weight:800; color:#1a1a1a; margin-bottom:4px; letter-spacing:-0.3px; }
+.page-header p  { font-size:12px; color:#999; margin-bottom:4px; }
+.page-header .note { font-size:11px; color:#bbb; font-style:italic; }
+
+.global-legend {
+  display:flex; flex-wrap:wrap; gap:8px 22px; justify-content:center;
+  background:#fff; border-radius:8px; border:1px solid #e8e8e8;
+  padding:14px 20px; margin:0 auto 16px; max-width:1000px;
+}
+.leg-group { display:flex; flex-direction:column; gap:3px; min-width:120px; }
+.leg-c1 { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:#222; }
+.leg-c2 { display:flex; align-items:center; gap:5px; font-size:10px; color:#666; padding-left:14px; }
+.sw   { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+.sw-s { width:8px;  height:8px;  border-radius:2px; flex-shrink:0; }
+
+.er-legend {
+  display:flex; align-items:center; gap:10px; justify-content:center;
+  margin:0 auto 32px; max-width:1000px;
+  background:#fff; border-radius:8px; border:1px solid #e8e8e8;
+  padding:10px 20px; flex-wrap:wrap; gap:8px 16px;
+}
+.er-legend-label { font-size:11px; font-weight:600; color:#555; }
+.er-gradient { width:200px; height:14px; border-radius:4px; background:linear-gradient(to right,#922B21,#C0392B,#E67E22,#F1C40F,#27AE60,#1A5E30); }
+.er-ticks { display:flex; justify-content:space-between; width:200px; font-size:9px; color:#aaa; }
+.er-def { font-size:10px; color:#aaa; font-style:italic; max-width:420px; }
+
+.archetype-section { margin-bottom:44px; }
+.arch-header {
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin-bottom:16px; padding-bottom:10px; border-bottom:2px solid;
+}
+.arch-badge { display:inline-block; padding:3px 12px; border-radius:20px; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; }
+.arch-desc  { font-size:12px; color:#888; }
+.arch-count { font-size:11px; font-weight:600; margin-left:auto; white-space:nowrap; }
+
+.flex-row { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; }
+
+.card {
+  background:#fff; border-radius:10px; border:1px solid #e8e8e8;
+  padding:14px 12px 12px; position:relative;
+  display:flex; flex-direction:column; flex-shrink:0;
+}
+.er-badge {
+  position:absolute; top:10px; right:10px;
+  padding:3px 7px; border-radius:5px;
+  font-size:11px; font-weight:700; line-height:1; color:#fff;
+}
+.er-sub {
+  position:absolute; top:27px; right:10px;
+  font-size:8px; font-weight:500; color:#bbb;
+  letter-spacing:0.05em; text-transform:uppercase; text-align:right;
+}
+.card-title { font-size:12px; font-weight:700; color:#1a1a1a; line-height:1.3; padding-right:52px; }
+.card-sub   { font-size:10px; color:#aaa; margin-bottom:8px; }
+.chart-area { position:relative; flex-shrink:0; }
+.chart-area canvas { display:block; }
+
+.arch-reaction { border-color:#E6A817; }
+.arch-widget   { border-color:#3A7D28; }
+.arch-quest    { border-color:#C0392B; }
+.arch-profile  { border-color:#1D6FA8; }
+.arch-mixed    { border-color:#888; }
+
+.badge-reaction { background:#FEF3CD; color:#9A6A00; }
+.badge-widget   { background:#E8F5E2; color:#2A5E1C; }
+.badge-quest    { background:#FDECEA; color:#922B21; }
+.badge-profile  { background:#EBF3FB; color:#154E7A; }
+.badge-mixed    { background:#F0F0F0; color:#555; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Client API Usage Archetypes — 2026</h1>
+  <p>23 material clients · Ranked by total call volume · Chart size log-scaled</p>
+  <div class="note">Profile widget interactions shown separately — it is a history read, not live engagement</div>
+</div>
+
+<div class="global-legend" id="globalLegend"></div>
+
+<div class="er-legend">
+  <span class="er-legend-label">Engagement rate</span>
+  <div>
+    <div class="er-gradient"></div>
+    <div class="er-ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+  </div>
+  <span class="er-legend-label">Low → High</span>
+  <span class="er-def">= (chat + widget interactions + interaction claims + invoked actions + reward transactions + quest rewards + text ask replies) ÷ total calls</span>
+</div>
+
+<div id="sections"></div>
+
+<script>
+function erColor(p) {
+  const stops=[[0,[146,43,33]],[25,[230,126,34]],[50,[241,196,15]],[75,[39,174,96]],[100,[26,94,48]]];
+  let lo=stops[0],hi=stops[stops.length-1];
+  for(let i=0;i<stops.length-1;i++){ if(p>=stops[i][0]&&p<=stops[i+1][0]){lo=stops[i];hi=stops[i+1];break;} }
+  const t=(p-lo[0])/(hi[0]-lo[0]);
+  const r=Math.round(lo[1][0]+(hi[1][0]-lo[1][0])*t);
+  const g=Math.round(lo[1][1]+(hi[1][1]-lo[1][1])*t);
+  const b=Math.round(lo[1][2]+(hi[1][2]-lo[1][2])*t);
+  return `rgb(${r},${g},${b})`;
+}
+
+const COLOR = {
+  'Profile||Create profile':                    '#1D6FA8',
+  'Profile||Get profile':                       '#6EB4E0',
+  'Reactions||Count user reactions':            '#E6A817',
+  'Reactions||List user reactions':             '#F5CE6A',
+  'Reactions||User reaction detail':            '#FAE4A8',
+  'Widget||Interactions':                       '#3A7D28',
+  'Widget||Impressions':                        '#7EC45A',
+  'Widget||Profile widget interactions':        '#A8D5B5',  // pale green — read call, visually distinct
+  'Rewards||Invoked actions':                   '#922B21',
+  'Rewards||Reward transactions':               '#E74C3C',
+  'Rewards||User quest rewards':                '#F1948A',
+  'Rewards||Reward item balances':              '#FADBD8',
+  'Rewards||Segment events':                    '#C0392B',
+  'Rewards||Batch invoked actions':             '#7B241C',
+  'Quest, Rewards & Leaderboard||Quests':       '#E07B6A',
+  'Quest, Rewards & Leaderboard||Leaderboard':  '#F2B5AE',
+  'Chat||Chat messages':                        '#7A8C99',
+  'Chat||Chat metadata':                        '#BFC9D0',
+  'App-level||App-level':                       '#B0B0B0',
+};
+
+const ORDER = [
+  'Profile||Create profile','Profile||Get profile',
+  'Reactions||Count user reactions','Reactions||List user reactions','Reactions||User reaction detail',
+  'Widget||Interactions','Widget||Impressions','Widget||Profile widget interactions',
+  'Rewards||Invoked actions','Rewards||Batch invoked actions','Rewards||Reward transactions',
+  'Rewards||User quest rewards','Rewards||Reward item balances','Rewards||Segment events',
+  'Quest, Rewards & Leaderboard||Quests','Quest, Rewards & Leaderboard||Leaderboard',
+  'Chat||Chat messages','Chat||Chat metadata',
+  'App-level||App-level',
+];
+
+const LEGEND_DEF = [
+  { cat1:'Profile',   color:'#1D6FA8', ch:[{l:'Create profile',c:'#1D6FA8'},{l:'Get profile',c:'#6EB4E0'}] },
+  { cat1:'Reactions', color:'#E6A817', ch:[{l:'Count user reactions',c:'#E6A817'},{l:'List user reactions',c:'#F5CE6A'},{l:'User reaction detail',c:'#FAE4A8'}] },
+  { cat1:'Widget',    color:'#3A7D28', ch:[{l:'Interactions',c:'#3A7D28'},{l:'Impressions',c:'#7EC45A'},{l:'Profile widget int. (read)',c:'#A8D5B5'}] },
+  { cat1:'Rewards',   color:'#922B21', ch:[{l:'Invoked actions',c:'#922B21'},{l:'Reward transactions',c:'#E74C3C'},{l:'User quest rewards',c:'#F1948A'},{l:'Reward item balances',c:'#FADBD8'},{l:'Segment events',c:'#C0392B'}] },
+  { cat1:'Quest & Leaderboard', color:'#E07B6A', ch:[{l:'Quests',c:'#E07B6A'},{l:'Leaderboard',c:'#F2B5AE'}] },
+  { cat1:'Chat',      color:'#7A8C99', ch:[{l:'Chat messages',c:'#7A8C99'},{l:'Chat metadata',c:'#BFC9D0'}] },
+];
+
+const ALL_T=[1508847200,1166166830,172621092,126556381,107141912,94832815,80776931,79709363,46088116,32440713,29511710,22861799,10340929,5818692,4800221,4169962,2328623,2289238,1999553,1687155,1267115,1253882,1140432];
+const LN_MIN=Math.log(Math.min(...ALL_T)), LN_MAX=Math.log(Math.max(...ALL_T));
+function logSize(t){ return Math.round(140+(340-140)*(Math.log(t)-LN_MIN)/(LN_MAX-LN_MIN)); }
+
+const ARCHETYPES = [
+  {
+    id:'reaction', label:'Reaction-focused', theme:'reaction',
+    desc:'Primarily fan reaction counting — high frequency, lightweight engagement layer',
+    clients:[
+      { name:'TNT Eurosport', er:0.1,  total:1508847200, cat2:{'Profile||Create profile':404114214,'Profile||Get profile':3680144,'Rewards||Invoked actions':657152,'Reactions||Count user reactions':1063462600,'Reactions||List user reactions':84209,'Reactions||User reaction detail':16621,'Widget||Impressions':22054259,'Widget||Interactions':468765,'Widget||Profile widget interactions':14309236} },
+      { name:'QuickPlay',     er:14.0, total:126556381,  cat2:{'Chat||Chat messages':17191001,'Profile||Create profile':32660608,'Profile||Get profile':16463253,'Rewards||Reward transactions':380840,'Reactions||Count user reactions':59555620,'Reactions||List user reactions':65865,'Reactions||User reaction detail':12314,'Widget||Impressions':66466,'Widget||Interactions':93894,'Widget||Profile widget interactions':66520} },
+      { name:'TNT Sports',    er:0.3,  total:107141912,  cat2:{'Chat||Chat messages':1113,'Profile||Create profile':28802569,'Profile||Get profile':119979,'Rewards||Invoked actions':26141,'Reactions||Count user reactions':63601055,'Reactions||List user reactions':16331,'Reactions||User reaction detail':2071,'Widget||Impressions':10583755,'Widget||Interactions':331223,'Widget||Profile widget interactions':3657675} },
+      { name:'Y! Sports',     er:0.0,  total:1687155,    cat2:{'Chat||Chat messages':10,'Profile||Create profile':1805,'Profile||Get profile':17995,'Reactions||List user reactions':1591098,'Reactions||User reaction detail':76247} },
+    ]
+  },
+  {
+    id:'widget', label:'Widget-focused', theme:'widget',
+    desc:'Heavy widget usage — polls, predictions, interaction claims, impressions',
+    clients:[
+      { name:'Bleacher Report', er:0.6,  total:1166166830, cat2:{'Chat||Chat messages':1562900,'Profile||Create profile':63359085,'Profile||Get profile':530185551,'Reactions||Count user reactions':41067106,'Reactions||List user reactions':3555477,'Reactions||User reaction detail':318821,'Widget||Impressions':131,'Widget||Interactions':5689386,'Widget||Profile widget interactions':520428373} },
+      { name:'Serie A',         er:0.9,  total:32440713,   cat2:{'Profile||Create profile':14301813,'Profile||Get profile':3256626,'Quest, Rewards & Leaderboard||Quests':15,'Rewards||Invoked actions':54832,'Rewards||Reward transactions':172,'Widget||Impressions':3192235,'Widget||Interactions':240973,'Widget||Profile widget interactions':11394047} },
+      { name:'LFP',             er:0.1,  total:29511710,   cat2:{'Chat||Chat messages':165,'Profile||Create profile':8856525,'Profile||Get profile':42319,'Widget||Impressions':17533018,'Widget||Interactions':42910,'Widget||Profile widget interactions':3036773} },
+      { name:'TOD',             er:2.3,  total:10340929,   cat2:{'Chat||Chat messages':1261,'Profile||Create profile':2914347,'Profile||Get profile':415499,'Rewards||Invoked actions':5,'Widget||Impressions':5317033,'Widget||Interactions':236078,'Widget||Profile widget interactions':1456706} },
+      { name:'PSG',             er:6.7,  total:5818692,    cat2:{'Chat||Chat messages':2406,'Profile||Create profile':1639588,'Profile||Get profile':4685,'Rewards||Invoked actions':61831,'Rewards||Reward transactions':13332,'Widget||Impressions':830170,'Widget||Interactions':311991,'Widget||Profile widget interactions':2954689} },
+      { name:'TGL',             er:27.6, total:1253882,    cat2:{'Chat||Chat messages':634,'Profile||Create profile':225014,'Profile||Get profile':10888,'Quest, Rewards & Leaderboard||Leaderboard':184,'Rewards||Invoked actions':15,'Widget||Impressions':359953,'Widget||Interactions':344902,'Widget||Profile widget interactions':312292} },
+      { name:'Minute Media',    er:52.5, total:1140432,    cat2:{'Profile||Create profile':68315,'Profile||Get profile':16094,'Quest, Rewards & Leaderboard||Leaderboard':12592,'Quest, Rewards & Leaderboard||Quests':2,'Rewards||Invoked actions':1,'Widget||Impressions':414605,'Widget||Interactions':599167,'Widget||Profile widget interactions':29656} },
+    ]
+  },
+  {
+    id:'quest', label:'Quest & Rewards-focused', theme:'quest',
+    desc:'Gamification and loyalty — reward transactions, quest completion, invoked actions',
+    clients:[
+      { name:'STC',                   er:68.7, total:80776931,  cat2:{'Chat||Chat messages':1,'Profile||Create profile':22931046,'Profile||Get profile':599528,'Quest, Rewards & Leaderboard||Quests':1747663,'Rewards||Invoked actions':45454486,'Rewards||Reward item balances':2573,'Rewards||Reward transactions':10031395,'Rewards||User quest rewards':10239} },
+      { name:'Gotham',                er:1.8,  total:22861799,  cat2:{'Chat||Chat messages':62,'Profile||Create profile':389031,'Profile||Get profile':445,'Quest, Rewards & Leaderboard||Quests':5081625,'Rewards||Invoked actions':7949,'Rewards||Segment events':16980111,'Rewards||User quest rewards':397953,'Widget||Impressions':1848,'Widget||Interactions':1736,'Widget||Profile widget interactions':1039} },
+      { name:'New York Mets',         er:61.4, total:4800221,   cat2:{'Chat||Chat messages':237,'Profile||Create profile':1307160,'Profile||Get profile':45366,'Quest, Rewards & Leaderboard||Quests':99774,'Rewards||Invoked actions':595347,'Rewards||Reward transactions':549136,'Rewards||User quest rewards':1502225,'Widget||Impressions':302563,'Widget||Interactions':299926,'Widget||Profile widget interactions':98487} },
+      { name:'Major League Baseball', er:68.4, total:1267115,   cat2:{'Profile||Create profile':27,'Profile||Get profile':212428,'Quest, Rewards & Leaderboard||Quests':187456,'Rewards||Invoked actions':867204} },
+    ]
+  },
+  {
+    id:'profile', label:'Profile / Onboarding only', theme:'profile',
+    desc:'Predominantly profile creation — limited feature activation beyond registration',
+    clients:[
+      { name:'TF1 PROD',          er:0.1,  total:172621092, cat2:{'Chat||Chat messages':61,'Profile||Create profile':135924492,'Profile||Get profile':61,'Widget||Impressions':25592826,'Widget||Interactions':127595,'Widget||Profile widget interactions':10976057} },
+      { name:'FRANCE TV',         er:24.9, total:79709363,  cat2:{'Chat||Chat messages':19714271,'Chat||Chat metadata':6,'Profile||Create profile':26419364,'Profile||Get profile':29173897,'Reactions||List user reactions':1,'Widget||Impressions':952707,'Widget||Interactions':149324,'Widget||Profile widget interactions':3299793} },
+      { name:'emBET',             er:0.0,  total:46088116,  cat2:{'Chat||Chat messages':199,'Profile||Create profile':43912281,'Profile||Get profile':7475,'Widget||Impressions':1828069,'Widget||Interactions':1801,'Widget||Profile widget interactions':338291} },
+      { name:'Brentford',         er:1.5,  total:4169962,   cat2:{'Chat||Chat messages':13,'Profile||Create profile':4069416,'Profile||Get profile':18261,'Widget||Impressions':55,'Widget||Interactions':62954,'Widget||Profile widget interactions':19263} },
+      { name:'Nottingham Forest', er:0.1,  total:2328623,   cat2:{'Profile||Create profile':2321883,'Profile||Get profile':125,'Quest, Rewards & Leaderboard||Quests':112,'Rewards||Invoked actions':47,'Rewards||Reward transactions':95,'Rewards||User quest rewards':55,'Widget||Impressions':4272,'Widget||Interactions':1031,'Widget||Profile widget interactions':1003} },
+      { name:'Celtic',            er:5.9,  total:2289238,   cat2:{'Profile||Create profile':1970010,'Rewards||Reward transactions':1,'Rewards||User quest rewards':1,'Widget||Impressions':170946,'Widget||Interactions':134128,'Widget||Profile widget interactions':14152} },
+      { name:'Pro League',        er:0.9,  total:1999553,   cat2:{'Chat||Chat messages':29,'Profile||Create profile':1752439,'Profile||Get profile':58,'Widget||Impressions':72557,'Widget||Interactions':18311,'Widget||Profile widget interactions':156159} },
+    ]
+  },
+  {
+    id:'mixed', label:'Mixed', theme:'mixed',
+    desc:'Significant usage across multiple categories — no single dominant use case',
+    clients:[
+      { name:'Chelsea FC', er:14.6, total:94832815, cat2:{'Chat||Chat messages':1653,'Profile||Create profile':41614574,'Profile||Get profile':3509251,'Quest, Rewards & Leaderboard||Leaderboard':1,'Quest, Rewards & Leaderboard||Quests':155,'Rewards||Invoked actions':108,'Rewards||Reward item balances':2,'Rewards||Reward transactions':4097630,'Rewards||Segment events':7,'Rewards||User quest rewards':206,'Reactions||Count user reactions':12380415,'Reactions||List user reactions':319219,'Reactions||User reaction detail':26933,'Widget||Impressions':5372127,'Widget||Interactions':9720415,'Widget||Profile widget interactions':17790118} },
+    ]
+  },
+];
+
+function fmt(n){ if(n>=1e9)return(n/1e9).toFixed(2)+'B'; if(n>=1e6)return(n/1e6).toFixed(1)+'M'; if(n>=1e3)return Math.round(n/1e3)+'K'; return n.toLocaleString(); }
+function pct(n,t){ return (n/t*100).toFixed(1)+'%'; }
+function textColor(hex){ const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16); return (r*299+g*587+b*114)/1000>150?'#1a1a1a':'#ffffff'; }
+
+const gl=document.getElementById('globalLegend');
+LEGEND_DEF.forEach(g=>{
+  const d=document.createElement('div'); d.className='leg-group';
+  d.innerHTML=`<div class="leg-c1"><div class="sw" style="background:${g.color}"></div>${g.cat1}</div>`+
+    g.ch.map(c=>`<div class="leg-c2"><div class="sw-s" style="background:${c.c}"></div>${c.l}</div>`).join('');
+  gl.appendChild(d);
+});
+
+const lp={
+  id:'lp',
+  afterDraw(chart){
+    const {ctx,chartArea:{left,right,top,bottom},config}=chart;
+    const cd=config._cd; if(!cd) return;
+    const cx=(left+right)/2, cy=(top+bottom)/2;
+    chart.getDatasetMeta(0).data.forEach((arc,i)=>{
+      const d=cd.sl[i];
+      if(d.v/cd.total<(cd.sz<180?0.08:0.05)) return;
+      const mid=(arc.startAngle+arc.endAngle)/2;
+      const r=(arc.innerRadius+arc.outerRadius)/2;
+      const x=cx+Math.cos(mid)*r, y=cy+Math.sin(mid)*r;
+      const tc=textColor(d.c);
+      const short=d.l.length>13?d.l.split(' ').slice(0,2).join(' '):d.l;
+      const fs=Math.max(8,Math.round(cd.sz/29));
+      ctx.save();
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font=`500 ${fs}px Manrope,sans-serif`; ctx.fillStyle=tc;
+      ctx.fillText(short,x,y-Math.round(fs*0.65));
+      ctx.font=`400 ${Math.max(7,fs-1)}px Manrope,sans-serif`;
+      ctx.fillText(pct(d.v,cd.total),x,y+Math.round(fs*0.75));
+      ctx.restore();
+    });
+  }
+};
+Chart.register(lp);
+
+const sections=document.getElementById('sections');
+ARCHETYPES.forEach(arch=>{
+  const sec=document.createElement('div'); sec.className='archetype-section';
+  const tot=arch.clients.reduce((s,c)=>s+c.total,0);
+  sec.innerHTML=`
+    <div class="arch-header arch-${arch.theme}">
+      <span class="arch-badge badge-${arch.theme}">${arch.label}</span>
+      <span class="arch-desc">${arch.desc}</span>
+      <span class="arch-count">${arch.clients.length} client${arch.clients.length>1?'s':''} · ${fmt(tot)} combined</span>
+    </div>
+    <div class="flex-row" id="row_${arch.id}"></div>`;
+  sections.appendChild(sec);
+
+  const row=document.getElementById(`row_${arch.id}`);
+  arch.clients.forEach(client=>{
+    const SZ=logSize(client.total);
+    const slices=ORDER.filter(k=>client.cat2[k]&&client.cat2[k]>0)
+      .map(k=>({k,l:k.split('||')[1],v:client.cat2[k],c:COLOR[k]||'#ccc'}));
+
+    const card=document.createElement('div');
+    card.className='card';
+    card.style.width=(SZ+24)+'px';
+    const cid='c_'+arch.id+'_'+client.name.replace(/[^a-z0-9]/gi,'_');
+
+    card.innerHTML=`
+      <div class="er-badge" style="background:${erColor(client.er)}">${client.er.toFixed(1)}%</div>
+      <div class="er-sub">Eng. rate</div>
+      <div class="card-title">${client.name}</div>
+      <div class="card-sub">${fmt(client.total)} calls</div>
+      <div class="chart-area" style="width:${SZ}px;height:${SZ}px;">
+        <canvas id="${cid}" width="${SZ}" height="${SZ}"></canvas>
+      </div>`;
+    row.appendChild(card);
+
+    requestAnimationFrame(()=>{
+      const canvas=document.getElementById(cid); if(!canvas) return;
+      const ch=new Chart(canvas,{
+        type:'pie',
+        data:{datasets:[{data:slices.map(s=>s.v),backgroundColor:slices.map(s=>s.c),borderColor:'#fff',borderWidth:1.5,hoverOffset:5}]},
+        options:{
+          responsive:false, layout:{padding:Math.round(SZ*0.03)},
+          plugins:{
+            legend:{display:false},
+            tooltip:{
+              callbacks:{
+                title(items){return slices[items[0].dataIndex].l;},
+                label(item){return[` ${fmt(item.raw)}  (${pct(item.raw,client.total)})`];}
+              },
+              backgroundColor:'#111',titleFont:{size:11,weight:'500'},bodyFont:{size:10},padding:7,cornerRadius:5,
+            }
+          }
+        }
+      });
+      ch.config._cd={total:client.total,sl:slices,sz:SZ};
+    });
+  });
+});
+</script>
+</body>
+</html>
