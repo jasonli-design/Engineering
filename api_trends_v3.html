@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client API Usage Trends — Apr 2025–Apr 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#f5f5f7; font-family:'Manrope',sans-serif; padding:32px 24px 60px; }
+
+.page-header { text-align:center; margin-bottom:24px; }
+.page-header h1 { font-size:22px; font-weight:800; color:#1a1a1a; margin-bottom:4px; letter-spacing:-0.3px; }
+.page-header p  { font-size:12px; color:#999; margin-bottom:4px; }
+.page-header .note { font-size:11px; color:#bbb; font-style:italic; }
+
+.global-legend {
+  display:flex; flex-wrap:wrap; gap:8px 22px; justify-content:center;
+  background:#fff; border-radius:8px; border:1px solid #e8e8e8;
+  padding:14px 20px; margin:0 auto 32px; max-width:1100px;
+}
+.leg-group { display:flex; flex-direction:column; gap:3px; min-width:120px; }
+.leg-c1 { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:#222; }
+.sw { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+
+.archetype-section { margin-bottom:44px; max-width:1100px; margin-left:auto; margin-right:auto; }
+.arch-header {
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin-bottom:16px; padding-bottom:10px; border-bottom:2px solid;
+}
+.arch-badge { display:inline-block; padding:3px 12px; border-radius:20px; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; }
+.arch-desc  { font-size:12px; color:#888; }
+.arch-count { font-size:11px; font-weight:600; margin-left:auto; white-space:nowrap; }
+
+/* TREND CARD */
+.trend-card {
+  background:#fff; border-radius:10px; border:1px solid #e8e8e8;
+  padding:14px 16px 12px; margin-bottom:12px;
+}
+.trend-card-header {
+  display:flex; align-items:baseline; justify-content:space-between;
+  margin-bottom:2px;
+}
+.trend-client-name { font-size:13px; font-weight:700; color:#1a1a1a; }
+.trend-total { font-size:11px; color:#aaa; font-weight:500; }
+.variance-badge {
+  font-size:10px; font-weight:700; letter-spacing:0.05em;
+  padding:2px 7px; border-radius:4px; margin-left:8px;
+}
+.variance-high { background:#FDECEA; color:#922B21; }
+.variance-shift { background:#FEF3CD; color:#9A6A00; }
+
+.trend-chart-wrap { position:relative; width:100%; height:240px; }
+
+.trend-legend {
+  display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:8px;
+}
+.tleg-item { display:flex; align-items:center; gap:4px; font-size:10px; color:#888; }
+.tleg-dot  { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+
+/* archetype themes */
+.arch-reaction { border-color:#E6A817; }
+.arch-widget   { border-color:#3A7D28; }
+.arch-quest    { border-color:#C0392B; }
+.arch-profile  { border-color:#1D6FA8; }
+.arch-mixed    { border-color:#888; }
+
+.badge-reaction { background:#FEF3CD; color:#9A6A00; }
+.badge-widget   { background:#E8F5E2; color:#2A5E1C; }
+.badge-quest    { background:#FDECEA; color:#922B21; }
+.badge-profile  { background:#EBF3FB; color:#154E7A; }
+.badge-mixed    { background:#F0F0F0; color:#555; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Client API Usage Trends — Apr 2025 to Apr 2026</h1>
+  <p>Monthly call volume by category · 13 months · Clients ordered by volatility within each archetype (most volatile on top)</p>
+  <div class="note">Stable categories stacked at bottom — growth visible at the top of each area</div>
+</div>
+
+<div class="global-legend" id="globalLegend"></div>
+
+<div id="sections"></div>
+
+<script>
+const MONTHS = ['Apr 25','May 25','Jun 25','Jul 25','Aug 25','Sep 25','Oct 25','Nov 25','Dec 25','Jan 26','Feb 26','Mar 26','Apr 26'];
+
+// Category colors matching the archetype report
+const COLORS = {
+  'Profile':    { fill:'rgba(29,111,168,0.55)',  border:'#1D6FA8', label:'Profile' },
+  'Reactions':  { fill:'rgba(230,168,23,0.55)',  border:'#E6A817', label:'Reactions' },
+  'Widget':     { fill:'rgba(58,125,40,0.55)',   border:'#3A7D28', label:'Widget' },
+  'Quest, Rewards & Leaderboard': { fill:'rgba(192,57,43,0.55)', border:'#C0392B', label:'Quest & Rewards' },
+  'Chat':       { fill:'rgba(122,140,153,0.55)', border:'#7A8C99', label:'Chat' },
+  'App-level':  { fill:'rgba(176,176,176,0.55)', border:'#B0B0B0', label:'App-level' },
+};
+
+const LEGEND_DEF = [
+  { label:'Profile',      color:'#1D6FA8' },
+  { label:'Reactions',    color:'#E6A817' },
+  { label:'Widget',       color:'#3A7D28' },
+  { label:'Quest & Rewards', color:'#C0392B' },
+  { label:'Chat',         color:'#7A8C99' },
+];
+
+function fmt(n){ if(n>=1e9)return(n/1e9).toFixed(1)+'B'; if(n>=1e6)return(n/1e6).toFixed(1)+'M'; if(n>=1e3)return Math.round(n/1e3)+'K'; return n.toLocaleString(); }
+
+// Build global legend
+const gl = document.getElementById('globalLegend');
+LEGEND_DEF.forEach(g => {
+  const d = document.createElement('div'); d.className='leg-group';
+  d.innerHTML=`<div class="leg-c1"><div class="sw" style="background:${g.color}"></div>${g.label}</div>`;
+  gl.appendChild(d);
+});
+
+// ── CLIENT DATA ──────────────────────────────────────────────────────────────
+// Categories ordered stable→volatile (bottom of stack → top)
+// Ordering within each client: Profile first (most stable base), then others by stability
+
+const ARCHETYPES = [
+  {
+    id:'reaction', label:'Reaction-focused', theme:'reaction',
+    desc:'Primarily fan reaction counting — high frequency, lightweight engagement layer',
+    clients:[
+      { name:'TNT Eurosport', cats:{
+          'Profile':   [12,1317,63524,15412347,81769827,104193761,96612381,107609140,96082810,116432846,119504759,111571354,102884554],
+          'Widget':    [0,325,11263,808094,3505718,4819574,2311832,2637811,3629683,5660405,5276050,6691524,5785284],
+          'Quest, Rewards & Leaderboard':[0,0,0,0,0,0,5,241,19019,286499,303850,59873,7088],
+          'Chat':      [0,1,0,1,0,0,0,0,0,0,0,0,0],
+          'Reactions': [0,326,1732,740394,16393814,27074352,111094607,233445500,183150395,298813514,242838000,334516784,256691905],
+      }},
+      { name:'QuickPlay', cats:{
+          'Widget':    [82041,142050,67244,125356,240551,10780,129865,170962,63586,4295,72195,1176,210662],
+          'Chat':      [751406,2272172,4696732,2802879,3469510,1565785,3166152,3666088,3642317,1166767,4830148,6620446,6949537],
+          'Quest, Rewards & Leaderboard':[25899,63308,112150,72892,98786,34807,75934,96415,78710,20779,105489,139875,188587],
+          'Profile':   [4725592,14872769,25236987,10399633,11502528,6762511,11882601,11312774,11768203,4311487,13941241,18717659,18157309],
+          'Reactions': [3059486,8926541,18285233,10728324,13557388,7459593,13903453,13404320,14701293,4618617,17245820,21954241,24283691],
+      }},
+      { name:'TNT Sports', cats:{
+          'Widget':    [530339,2734346,2358198,2719054,3419246,3604087,2232949,2957853,2821365,3008037,2602211,3028539,3172788],
+          'Quest, Rewards & Leaderboard':[0,21,1,1,1,4,4,865,573,10304,11626,3662,763],
+          'Chat':      [63,571,217,420,248,329,272,545,311,454,191,335,232],
+          'Profile':   [4013578,22449807,17247461,20519699,18682053,17636419,14987389,27837302,15860579,12856466,6928768,7315150,8510028],
+          'Reactions': [5145743,28262593,20275624,24560560,23020777,21395485,18158100,32922836,19279407,18908624,12172388,20803923,16649881],
+      }},
+      { name:'Y! Sports', cats:{
+          'Chat':      [0,1,0,2,0,0,1,0,0,3,5,0,2],
+          'Profile':   [121427,235144,246566,14221,14150,23678,17068,13868,9751,7680,3218,5700,7931],
+          'Reactions': [79985,243580,168986,137405,292617,634298,715064,680357,718133,673328,281911,404443,479068],
+      }},
+    ]
+  },
+  {
+    id:'widget', label:'Widget-focused', theme:'widget',
+    desc:'Heavy widget usage — polls, predictions, interaction claims, impressions',
+    clients:[
+      { name:'TOD', cats:{
+          'Chat':      [4,997,2235,2487,1193,981,339,688,356,672,411,38,151],
+          'Quest, Rewards & Leaderboard':[0,0,0,0,0,0,0,0,0,0,0,5,0],
+          'Profile':   [41,10077,16849,18501,10007,16671,27881,13378,3451,8316,581876,1650,6633913],
+          'Widget':    [0,5880,14035,13168,11382,24497,30098,23188,7518,15734,1074924,1993,7024076],
+      }},
+      { name:'Minute Media', cats:{
+          'Quest, Rewards & Leaderboard':[0,1,0,0,0,0,0,0,156,0,1,12568,80],
+          'Profile':   [210,70,38,0,0,0,0,0,767,86,188,112112,2089],
+          'Widget':    [5,20,6,0,0,0,0,0,143,19,11,999975,14475],
+      }},
+      { name:'TGL', cats:{
+          'Chat':      [0,0,2,77,2,3,60,803,909,444,102,83,5],
+          'Quest, Rewards & Leaderboard':[0,3,0,0,0,0,0,418,645,85,75,31,8],
+          'Profile':   [266,1992,1656,2950,574,1196,1628,148724,141959,160280,270694,115358,2062],
+          'Widget':    [42,109,210,447,14,78,1128,12847,180819,222380,238347,244047,153],
+      }},
+      { name:'Serie A', cats:{
+          'Quest, Rewards & Leaderboard':[0,0,0,0,0,0,12,174,8819,15910,11845,18060,11500],
+          'Profile':   [0,0,0,0,0,12,25607,69213,2129537,10111631,7688878,6419068,6603445],
+          'Widget':    [0,0,0,0,0,0,6974,5271,417608,1286881,720652,822265,888014],
+      }},
+      { name:'PSG', cats:{
+          'Chat':      [0,505,1068,279,350,1133,593,498,499,718,886,489,433],
+          'Quest, Rewards & Leaderboard':[0,696,209,54,5269,22878,71537,28395,42099,14322,17435,24939,29146],
+          'Profile':   [203712,1202380,910140,153735,224478,531147,842709,579575,1234987,1289558,1264279,1074018,1964184],
+          'Widget':    [125896,516995,577348,1469780,1195364,325057,770359,319054,591737,319148,371415,241743,376893],
+      }},
+      { name:'LFP', cats:{
+          'Chat':      [0,0,0,0,269,259,147,93,57,69,41,49,7],
+          'Profile':   [0,0,0,81,1597798,3609187,3979793,3154620,1553366,3170969,3758334,2659594,3409914],
+          'Widget':    [0,0,0,0,2676383,6391931,6089419,4591449,2219717,4513814,5244614,4233664,5230149],
+      }},
+      { name:'Bleacher Report', cats:{
+          'Chat':      [1230248,613754,1169522,427934,375214,892808,1055154,900926,741367,645986,254671,369702,446675],
+          'Reactions': [3741343,10722475,10107273,9102560,8710096,10717678,13677916,13149094,13796142,16517718,8647997,12660135,12509013],
+          'Profile':   [18633969,39078626,31708636,50103812,68435470,87810258,71425536,86518247,81931629,205525262,307932985,399851274,332991631],
+          'Widget':    [27889,52454,50344,160007,244327,226041,172292,251782,171558,1075574,2003153,1725454,1281616],
+      }},
+    ]
+  },
+  {
+    id:'quest', label:'Quest & Rewards-focused', theme:'quest',
+    desc:'Gamification and loyalty — reward transactions, quest completion, invoked actions',
+    clients:[
+      { name:'New York Mets', cats:{
+          'Chat':      [31,267,257,202,719,274,25,5,0,20,6,59,230],
+          'Widget':    [84579,584958,523727,529390,599399,473372,294186,265994,250178,118745,106754,170563,288064],
+          'Profile':   [200957,1132938,1036960,1009486,1207321,1005174,439383,435539,350934,248100,180436,471602,799722],
+          'Quest, Rewards & Leaderboard':[234676,1852294,1622884,1666918,2066741,1407658,905887,842642,776849,542831,558629,753378,1320472],
+      }},
+      { name:'STC', cats:{
+          'Chat':      [0,35,10,1,0,2,0,1,1,0,1,0,0],
+          'Widget':    [0,980,0,0,0,0,0,0,0,0,0,0,0],
+          'Profile':   [6,16652,47522,33007,169627,2541046,3858073,5275092,5462848,3962401,6334713,9109769,5556203],
+          'Quest, Rewards & Leaderboard':[0,3160,16712,22662,385125,11015984,14897274,14541316,15439098,12869756,13758889,18973946,16173538],
+      }},
+      { name:'Gotham', cats:{
+          'Chat':      [0,42,14,31,23,19,51,45,15,13,44,0,5],
+          'Widget':    [0,34,2,25,18,11,135,0,63,128,787,1,2676],
+          'Profile':   [23913,126770,131890,158219,143147,115528,95906,103093,73978,63312,84230,124352,145356],
+          'Quest, Rewards & Leaderboard':[935176,4547452,3090486,3575879,3793198,3494831,2565781,7590030,4368986,2321340,3451051,6992286,12685869],
+      }},
+      { name:'Major League Baseball', cats:{
+          'Profile':   [42553,428633,409235,368986,444234,296997,6,0,0,0,0,12374,274407],
+          'Quest, Rewards & Leaderboard':[155491,1425768,1379095,1308723,1659811,1195133,0,0,0,0,0,85367,1292002],
+      }},
+    ]
+  },
+  {
+    id:'profile', label:'Profile / Onboarding only', theme:'profile',
+    desc:'Predominantly profile creation — limited feature activation beyond registration',
+    clients:[
+      { name:'Celtic', cats:{
+          'Chat':      [0,0,0,0,0,0,15,0,0,0,0,0,0],
+          'Quest, Rewards & Leaderboard':[0,0,0,0,3,15,10,1,0,0,2,0,0],
+          'Widget':    [0,0,0,0,130,481,1697,18210,2864,75850,112237,79123,55013],
+          'Profile':   [0,0,0,192,1490,3045,24525,4001,5589,335174,790172,528956,445704],
+      }},
+      { name:'Nottingham Forest', cats:{
+          'Quest, Rewards & Leaderboard':[0,0,0,0,0,0,0,49,18,21,86,2,237],
+          'Widget':    [0,0,0,0,0,0,36,188,368,10,582,426,4414],
+          'Profile':   [0,0,0,0,0,0,722,801,368204,571781,664812,623069,653378],
+      }},
+      { name:'France TV', cats:{
+          'Quest, Rewards & Leaderboard':[0,0,0,0,0,7,0,0,0,0,0,0,0],
+          'Widget':    [1084,550379,923073,619213,152,856,786,213,236,306,1002804,53995,113822],
+          'Chat':      [30144,2971493,6841260,6838151,518,6268,3182,181,137,1005,16743195,2007072,1571303],
+          'Profile':   [31030,10292126,30360165,21783871,2975,21947,10392,784,482,3074,49630163,6217123,4984059],
+      }},
+      { name:'TF1 PROD', cats:{
+          'Chat':      [18,46,172,55,107,101,98,68,21,17,32,10,2],
+          'Widget':    [524173,1777676,9848042,10403339,10308430,9910984,15953928,14121412,15813186,4967607,7385542,7977556,7644376],
+          'Profile':   [1941301,6403044,37919919,40265485,40843294,43246018,79337489,70546460,70345783,20918510,31315906,45904815,68562056],
+      }},
+      { name:'emBET', cats:{
+          'Chat':      [12,104,24,20,20,192,56,59,17,83,87,16,13],
+          'Widget':    [34698,194950,33558,4360,133372,137457,264643,555557,425778,492477,457264,465970,573495],
+          'Profile':   [2024432,7062773,3669939,3658587,8693201,7753642,13977293,20962523,15560460,16834680,9913389,13937507,4174072],
+      }},
+      { name:'Brentford', cats:{
+          'Chat':      [2,4,0,7,32,67,81,12,6,10,0,0,3],
+          'Widget':    [519,7745,665,680,18621,15488,23303,14161,17366,24052,19462,15244,6976],
+          'Profile':   [95788,870297,829360,889976,1357919,1086073,1177079,871632,1246888,1007643,878981,842086,2354178],
+      }},
+      { name:'Pro League', cats:{
+          'Chat':      [0,0,0,2,19,0,0,8,0,23,5,0,1],
+          'Quest, Rewards & Leaderboard':[0,0,0,0,42,1,2,0,0,0,0,0,0],
+          'Widget':    [8051,27683,862,17958,55531,30483,22811,27597,32652,17368,29944,25333,28725],
+          'Profile':   [153781,610253,204350,452847,1229153,911709,665036,447883,540939,361349,556684,616895,554613],
+      }},
+    ]
+  },
+  {
+    id:'mixed', label:'Mixed', theme:'mixed',
+    desc:'Significant usage across multiple categories — no single dominant use case',
+    clients:[
+      { name:'Chelsea FC', cats:{
+          'Chat':      [77,232,102,247,291,278,386,364,378,410,569,362,605],
+          'Quest, Rewards & Leaderboard':[112811,1489063,928593,1382695,2764392,2262421,2174207,2214006,1326603,1675758,1096092,914259,590496],
+          'Reactions': [357428,2920207,3546987,3604808,4998245,4044551,3205110,3569677,3231063,4657738,3451592,3013091,2460956],
+          'Widget':    [453768,3760398,2159652,3347457,6410701,4944157,5385929,5391763,5741000,5632710,4062314,3826867,2187891],
+          'Profile':   [2522602,21503276,27473033,43116736,36303067,21195956,18727506,19621429,20616866,25459879,18508390,12916180,8730725],
+      }},
+    ]
+  },
+];
+
+// ── TRIM LEADING ZERO MONTHS ─────────────────────────────────────────────────
+// Find the first month where ANY category has a non-zero value
+function firstActiveMonth(cats) {
+  for (let i = 0; i < MONTHS.length; i++) {
+    if (Object.values(cats).some(arr => arr[i] > 0)) return i;
+  }
+  return 0;
+}
+function trimCats(cats) {
+  const start = firstActiveMonth(cats);
+  if (start === 0) return { months: MONTHS, cats };
+  const months = MONTHS.slice(start);
+  const trimmed = {};
+  for (const k in cats) trimmed[k] = cats[k].slice(start);
+  return { months, cats: trimmed };
+}
+
+// ── VOLATILITY SCORING ───────────────────────────────────────────────────────
+function coeffVar(arr) {
+  const mean = arr.reduce((a,b)=>a+b,0)/arr.length;
+  if (mean === 0) return 0;
+  const sd = Math.sqrt(arr.map(v=>Math.pow(v-mean,2)).reduce((a,b)=>a+b,0)/arr.length);
+  return sd/mean;
+}
+function clientCV(cats) {
+  const totals = MONTHS.map((_,i) => Object.values(cats).reduce((s,c)=>s+c[i],0));
+  return coeffVar(totals);
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+const sections = document.getElementById('sections');
+
+ARCHETYPES.forEach(arch => {
+  // Sort clients: highest CV first (most volatile on top)
+  const sorted = [...arch.clients].sort((a,b) => clientCV(b.cats) - clientCV(a.cats));
+  const tot = arch.clients.reduce((s,c) => s + Object.values(c.cats).flat().reduce((a,b)=>a+b,0), 0);
+
+  const sec = document.createElement('div');
+  sec.className = 'archetype-section';
+  sec.innerHTML = `
+    <div class="arch-header arch-${arch.theme}">
+      <span class="arch-badge badge-${arch.theme}">${arch.label}</span>
+      <span class="arch-desc">${arch.desc}</span>
+      <span class="arch-count">${arch.clients.length} client${arch.clients.length>1?'s':''} · ${fmt(tot)} combined</span>
+    </div>
+    <div id="cards_${arch.id}"></div>`;
+  sections.appendChild(sec);
+
+  const container = document.getElementById('cards_' + arch.id);
+
+  sorted.forEach(client => {
+    const cv = clientCV(client.cats);
+    const { months: activeMONTHS, cats: activeCats } = trimCats(client.cats);
+    const catNames = Object.keys(activeCats);
+    const monthTotals = activeMONTHS.map((_,i) => catNames.reduce((s,c)=>s+activeCats[c][i],0));
+    const grandTotal = monthTotals.reduce((a,b)=>a+b,0);
+
+    let varBadge = '';
+    if (cv > 0.6) varBadge = '<span class="variance-badge variance-high">HIGH VARIANCE</span>';
+    else if (cv > 0.3) varBadge = '<span class="variance-badge variance-shift">SHIFTING</span>';
+
+    const cid = 'tc_' + arch.id + '_' + client.name.replace(/[^a-z0-9]/gi,'_');
+
+    const card = document.createElement('div');
+    card.className = 'trend-card';
+    card.innerHTML = `
+      <div class="trend-card-header">
+        <div><span class="trend-client-name">${client.name}</span>${varBadge}</div>
+        <span class="trend-total">${fmt(grandTotal)} total</span>
+      </div>
+      <div class="trend-chart-wrap">
+        <canvas id="${cid}" role="img" aria-label="API usage trend for ${client.name}"></canvas>
+      </div>
+      <div class="trend-legend" id="leg_${cid}"></div>`;
+    container.appendChild(card);
+
+    // legend
+    const legEl = document.getElementById('leg_' + cid);
+    catNames.forEach(cat => {
+      const c = COLORS[cat] || { border:'#ccc', label: cat };
+      const shortName = cat === 'Quest, Rewards & Leaderboard' ? 'Quest & Rewards' : cat;
+      legEl.innerHTML += `<span class="tleg-item"><span class="tleg-dot" style="background:${c.border}"></span>${shortName}</span>`;
+    });
+
+    requestAnimationFrame(() => {
+      const canvas = document.getElementById(cid); if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      const datasets = catNames.map(cat => {
+        const c = COLORS[cat] || { fill:'rgba(150,150,150,0.4)', border:'#999' };
+        return {
+          label: cat,
+          data: activeCats[cat],
+          backgroundColor: c.fill,
+          borderColor: c.border,
+          borderWidth: 1.5,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+        };
+      });
+
+      new Chart(ctx, {
+        type: 'line',
+        data: { labels: activeMONTHS, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode:'index', intersect:false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#111',
+              titleFont: { family:'Manrope', size:11, weight:'600' },
+              bodyFont:  { family:'Manrope', size:10 },
+              titleColor: '#fff',
+              bodyColor:  '#ccc',
+              padding: 8,
+              cornerRadius: 5,
+              callbacks: {
+                label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)}`
+              }
+            }
+          },
+          scales: {
+            x: {
+              stacked: true,
+              grid: { color:'rgba(0,0,0,0.05)', drawBorder:false },
+              ticks: { font:{family:'Manrope',size:9}, color:'#bbb', maxRotation:0, autoSkip:true, maxTicksLimit:7 },
+              border: { display:false }
+            },
+            y: {
+              stacked: true,
+              grid: { color:'rgba(0,0,0,0.05)', drawBorder:false },
+              ticks: { font:{family:'Manrope',size:9}, color:'#bbb', callback: v => fmt(v), maxTicksLimit:4 },
+              min: 0,
+              border: { display:false }
+            }
+          }
+        }
+      });
+    });
+  });
+});
+</script>
+</body>
+</html>
