@@ -107,6 +107,7 @@ const LEGEND_DEF = [
 ];
 
 function fmt(n){ if(n>=1e9)return(n/1e9).toFixed(1)+'B'; if(n>=1e6)return(n/1e6).toFixed(1)+'M'; if(n>=1e3)return Math.round(n/1e3)+'K'; return n.toLocaleString(); }
+function fmtK(n){ return Math.round(n/1000).toLocaleString()+'K'; }
 
 // Build global legend
 const gl = document.getElementById('globalLegend');
@@ -176,14 +177,14 @@ const ARCHETYPES = [
       }},
       { name:'Serie A', cats:{
           'Quest, Rewards & Leaderboard':[0,0,0,0,0,0,12,174,8819,15910,11845,18060,11500],
-          'Profile':   [0,0,0,0,0,12,25607,69213,2129537,10111631,7688878,6419068,6603445],
           'Widget':    [0,0,0,0,0,0,6974,5271,417608,1286881,720652,822265,888014],
+          'Profile':   [0,0,0,0,0,12,25607,69213,2129537,10111631,7688878,6419068,6603445],
       }},
       { name:'PSG', cats:{
           'Chat':      [0,505,1068,279,350,1133,593,498,499,718,886,489,433],
           'Quest, Rewards & Leaderboard':[0,696,209,54,5269,22878,71537,28395,42099,14322,17435,24939,29146],
-          'Profile':   [203712,1202380,910140,153735,224478,531147,842709,579575,1234987,1289558,1264279,1074018,1964184],
           'Widget':    [125896,516995,577348,1469780,1195364,325057,770359,319054,591737,319148,371415,241743,376893],
+          'Profile':   [203712,1202380,910140,153735,224478,531147,842709,579575,1234987,1289558,1264279,1074018,1964184],
       }},
       { name:'LFP', cats:{
           'Chat':      [0,0,0,0,269,259,147,93,57,69,41,49,7],
@@ -285,16 +286,30 @@ const ARCHETYPES = [
   },
 ];
 
-// ── TRIM LEADING ZERO MONTHS ─────────────────────────────────────────────────
-// Find the first month where ANY category has a non-zero value
-function firstActiveMonth(cats) {
-  for (let i = 0; i < MONTHS.length; i++) {
-    if (Object.values(cats).some(arr => arr[i] > 0)) return i;
-  }
-  return 0;
-}
-function trimCats(cats) {
-  const start = firstActiveMonth(cats);
+// ── LAUNCH MONTH OVERRIDES ───────────────────────────────────────────────────
+// Index into MONTHS (0=Apr25). Skips testing/trickle period before production.
+const LAUNCH_MONTH = {
+  'TOD':                    9,  // Jan 26 — prior months ~10-60K testing
+  'Serie A':                8,  // Dec 25 — Oct/Nov ramp <75K
+  'TGL':                    7,  // Nov 25 — prior months <4K
+  'Celtic':                 9,  // Jan 26 — first real production volume
+  'Nottingham Forest':      8,  // Dec 25 — Oct/Nov <1K test calls
+  'STC':                    5,  // Sep 25 — clear production launch
+  'Minute Media':          11,  // Mar 26 — only real month so far
+  'LFP':                    4,  // Aug 25 — Jul trickle (81 calls) is testing
+  'France TV':              1,  // May 25 — Apr trickle
+  'Brentford':              4,  // Aug 25 — prior months tiny
+  'Pro League':             4,  // Aug 25 — prior months near-zero
+};
+
+function trimCats(name, cats) {
+  const start = (LAUNCH_MONTH[name] !== undefined) ? LAUNCH_MONTH[name]
+    : (() => {
+        for (let i = 0; i < MONTHS.length; i++) {
+          if (Object.values(cats).some(arr => arr[i] > 0)) return i;
+        }
+        return 0;
+      })();
   if (start === 0) return { months: MONTHS, cats };
   const months = MONTHS.slice(start);
   const trimmed = {};
@@ -318,8 +333,18 @@ function clientCV(cats) {
 const sections = document.getElementById('sections');
 
 ARCHETYPES.forEach(arch => {
-  // Sort clients: highest CV first (most volatile on top)
-  const sorted = [...arch.clients].sort((a,b) => clientCV(b.cats) - clientCV(a.cats));
+  // Sort clients: highest monthly avg (over active months) first
+  const sorted = [...arch.clients].sort((a,b) => {
+    function monthlyAvg(name, cats) {
+      const start = LAUNCH_MONTH[name] !== undefined ? LAUNCH_MONTH[name] : 0;
+      const totals = [];
+      for (let i = start; i < MONTHS.length; i++) {
+        totals.push(Object.values(cats).reduce((s,c) => s + c[i], 0));
+      }
+      return totals.length ? totals.reduce((a,b)=>a+b,0) / totals.length : 0;
+    }
+    return monthlyAvg(b.name, b.cats) - monthlyAvg(a.name, a.cats);
+  });
   const tot = arch.clients.reduce((s,c) => s + Object.values(c.cats).flat().reduce((a,b)=>a+b,0), 0);
 
   const sec = document.createElement('div');
@@ -337,7 +362,7 @@ ARCHETYPES.forEach(arch => {
 
   sorted.forEach(client => {
     const cv = clientCV(client.cats);
-    const { months: activeMONTHS, cats: activeCats } = trimCats(client.cats);
+    const { months: activeMONTHS, cats: activeCats } = trimCats(client.name, client.cats);
     const catNames = Object.keys(activeCats);
     const monthTotals = activeMONTHS.map((_,i) => catNames.reduce((s,c)=>s+activeCats[c][i],0));
     const grandTotal = monthTotals.reduce((a,b)=>a+b,0);
@@ -406,7 +431,7 @@ ARCHETYPES.forEach(arch => {
               padding: 8,
               cornerRadius: 5,
               callbacks: {
-                label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)}`
+                label: c => ` ${c.dataset.label}: ${fmtK(c.parsed.y)}`
               }
             }
           },
